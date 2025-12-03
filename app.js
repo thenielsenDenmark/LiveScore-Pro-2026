@@ -176,6 +176,8 @@ function getInitials(name) {
 
 function updateTimeDisplays() {
     if (clockElement) clockElement.textContent = formatTime(state.seconds);
+    const stickyTime = document.getElementById('stickyTime');
+    if (stickyTime) stickyTime.textContent = formatTime(state.seconds);
     Object.keys(playerTimeElements).forEach(playerId => {
         const player = state.players.find(p => p.id === parseInt(playerId));
         if (player && playerTimeElements[playerId]) {
@@ -714,47 +716,36 @@ function render() {
                     <button class="btn btn-secondary btn-icon" onclick="openSettings('team')" title="Settings">⚙️</button>
                 </div>
             </div>
-            <div class="match-clock">
-                <div class="clock-time" id="mainClock">${formatTime(state.seconds)}</div>
-                <div class="clock-label">Match Time</div>
-                <div class="clock-controls">
-                    <button class="btn ${state.isRunning ? 'btn-danger' : 'btn-primary'}" onclick="toggleTimer()">${state.isRunning ? '⏸ Pause' : '▶ Start'}</button>
-                    <button class="btn btn-secondary" onclick="resetMatch()">↺ Reset</button>
-                </div>
-            </div>
-            <div class="scoreboard">
-                <div class="team-score-wrapper" onclick="openSettings('home-logo')">
-                    <div class="team-badge">${state.teamLogo ? `<img src="${state.teamLogo}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="badge-initials" style="display:none">${getInitials(state.teamName)}</span>` : `<span class="badge-initials">${getInitials(state.teamName)}</span>`}</div>
-                    <div class="team-name-fixed">${state.teamName}</div>
-                </div>
-                <div class="score-center">
-                    <div class="score-display">
-                        <span class="score-number home">${state.homeScore}</span>
-                        <span class="score-separator">:</span>
-                        <span class="score-number away">${state.awayScore}</span>
+            <div class="clock-section">
+                <div class="match-clock">
+                    <div class="clock-time" id="mainClock">${formatTime(state.seconds)}</div>
+                    <div class="clock-label">Match Time</div>
+                    <div class="clock-controls">
+                        <button class="btn ${state.isRunning ? 'btn-danger' : 'btn-primary'}" onclick="toggleTimer()">${state.isRunning ? '⏸ Pause' : '▶ Start'}</button>
+                        <button class="btn btn-secondary" onclick="resetMatch()">↺ Reset</button>
                     </div>
-                    <div class="match-datetime">
-                        <span class="match-date">${state.matchDate}</span>
-                        <span class="datetime-sep">•</span>
-                        <span class="match-time-display">${state.matchTime}</span>
-                    </div>
-                    ${state.matchLocation ? `<div class="match-location">📍 ${state.matchLocation}</div>` : ''}
-                </div>
-                <div class="team-score-wrapper">
-                    <div class="team-badge" onclick="openSettings('away-logo')">${state.awayTeamLogo ? `<img src="${state.awayTeamLogo}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="badge-initials" style="display:none">${getInitials(state.awayTeamName)}</span>` : `<span class="badge-initials">${getInitials(state.awayTeamName)}</span>`}</div>
-                    <div class="team-name-fixed">${state.awayTeamName}</div>
-                    <button class="away-goal-btn" onclick="event.stopPropagation(); scoreAwayGoal()">⚽ Goal</button>
                 </div>
             </div>
         </header>
-        <div class="match-config">
-            <div class="config-row">
-                <label class="config-label">Match Type</label>
-                <select class="config-select" onchange="setMatchSize(parseInt(this.value))">${[3,4,5,6,7,8,9,10,11].map(s => `<option value="${s}" ${state.matchSize === s ? 'selected' : ''}>${s}v${s} (${getSquadSize(s)} squad)</option>`).join('')}</select>
-            </div>
-            <div class="config-row">
-                <label class="config-label">Formation</label>
-                <select class="config-select" onchange="setFormation(this.value)">${formations.map(f => `<option value="${f.name}" ${state.formation === f.name ? 'selected' : ''}>${f.name}</option>`).join('')}</select>
+        <div class="sticky-scoreboard">
+            <div class="scoreboard-compact">
+                <div class="team-side home" onclick="openSettings('home-logo')">
+                    <div class="team-badge-sm">${state.teamLogo ? `<img src="${state.teamLogo}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="badge-initials" style="display:none">${getInitials(state.teamName)}</span>` : `<span class="badge-initials">${getInitials(state.teamName)}</span>`}</div>
+                    <div class="team-name-sm">${state.teamName}</div>
+                </div>
+                <div class="score-center-sticky">
+                    <div class="score-row">
+                        <span class="score-num home">${state.homeScore}</span>
+                        <span class="score-sep">:</span>
+                        <span class="score-num away">${state.awayScore}</span>
+                    </div>
+                    <div class="score-time" id="stickyTime">${formatTime(state.seconds)}</div>
+                </div>
+                <div class="team-side away">
+                    <div class="team-badge-sm" onclick="openSettings('away-logo')">${state.awayTeamLogo ? `<img src="${state.awayTeamLogo}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="badge-initials" style="display:none">${getInitials(state.awayTeamName)}</span>` : `<span class="badge-initials">${getInitials(state.awayTeamName)}</span>`}</div>
+                    <div class="team-name-sm">${state.awayTeamName}</div>
+                    <button class="away-goal-btn-sm" onclick="event.stopPropagation(); scoreAwayGoal()">⚽ Goal</button>
+                </div>
             </div>
         </div>
         <main class="main-content">
@@ -762,6 +753,16 @@ function render() {
                 <div class="pitch-markings"><div class="center-line"></div><div class="center-circle"></div><div class="penalty-area"></div></div>
                 <div class="pitch-formation" id="pitchFormation">
                     ${renderFormationLayout()}
+                </div>
+            </div>
+            <div class="match-config">
+                <div class="config-row">
+                    <label class="config-label">Match</label>
+                    <select class="config-select" onchange="setMatchSize(parseInt(this.value))">${[3,4,5,6,7,8,9,10,11].map(s => `<option value="${s}" ${state.matchSize === s ? 'selected' : ''}>${s}v${s}</option>`).join('')}</select>
+                </div>
+                <div class="config-row">
+                    <label class="config-label">Formation</label>
+                    <select class="config-select" onchange="setFormation(this.value)">${formations.map(f => `<option value="${f.name}" ${state.formation === f.name ? 'selected' : ''}>${f.name}</option>`).join('')}</select>
                 </div>
             </div>
             <div class="bench-container">
