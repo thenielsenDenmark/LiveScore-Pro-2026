@@ -373,19 +373,35 @@ function removePlayer(playerId) {
 function handleDragStart(e, playerId) {
     state.draggedPlayer = playerId;
     e.target.classList.add('dragging');
+    document.body.classList.add('is-dragging');
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', playerId);
+    // Create custom drag image
+    const dragGhost = e.target.cloneNode(true);
+    dragGhost.style.cssText = 'position:absolute;top:-1000px;opacity:0.8;transform:scale(1.1);';
+    document.body.appendChild(dragGhost);
+    e.dataTransfer.setDragImage(dragGhost, 30, 30);
+    setTimeout(() => dragGhost.remove(), 0);
 }
 function handleDragEnd(e) {
     state.draggedPlayer = null;
     e.target.classList.remove('dragging');
+    document.body.classList.remove('is-dragging');
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 }
-function handleDragOver(e) { e.preventDefault(); }
-function handleDragEnter(e) { e.target.closest('.pitch-slot')?.classList.add('drag-over'); }
-function handleDragLeave(e) { e.target.closest('.pitch-slot')?.classList.remove('drag-over'); }
+function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function handleDragEnter(e) { 
+    e.preventDefault();
+    const slot = e.target.closest('.pitch-slot');
+    if (slot) slot.classList.add('drag-over'); 
+}
+function handleDragLeave(e) { 
+    const slot = e.target.closest('.pitch-slot');
+    if (slot && !slot.contains(e.relatedTarget)) slot.classList.remove('drag-over'); 
+}
 function handleDrop(e, slotIndex) {
     e.preventDefault();
+    document.body.classList.remove('is-dragging');
     e.target.closest('.pitch-slot')?.classList.remove('drag-over');
     const playerId = parseInt(e.dataTransfer.getData('text/plain'));
     if (!playerId) return;
@@ -416,14 +432,18 @@ function handleDrop(e, slotIndex) {
 
 function handleTouchStart(e, playerId) {
     state.draggedPlayer = playerId;
-    e.target.closest('.bench-player')?.classList.add('dragging');
+    const el = e.target.closest('.bench-player');
+    if (el) el.classList.add('dragging');
+    document.body.classList.add('is-dragging');
 }
 function handleTouchMove(e) {
     if (!state.draggedPlayer) return;
     e.preventDefault();
     const touch = e.touches[0];
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    document.elementFromPoint(touch.clientX, touch.clientY)?.closest('.pitch-slot')?.classList.add('drag-over');
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+    const slot = element?.closest('.pitch-slot');
+    if (slot) slot.classList.add('drag-over');
 }
 function handleTouchEnd(e) {
     if (!state.draggedPlayer) return;
@@ -442,6 +462,7 @@ function handleTouchEnd(e) {
         }
     }
     state.draggedPlayer = null;
+    document.body.classList.remove('is-dragging');
     document.querySelectorAll('.dragging').forEach(el => el.classList.remove('dragging'));
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
     render();
@@ -610,6 +631,72 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.closePath();
 }
 
+function getFormationRows(formationName, matchSize) {
+    // Parse formation like "4-4-2" or "2-1-2" into rows from back to front
+    const parts = formationName.split('-').map(n => parseInt(n));
+    
+    // Define position labels for each row based on count
+    const positionsByRow = {
+        1: { back: ['GK'], mid: ['CM'], front: ['ST'] },
+        2: { back: ['LB', 'RB'], mid: ['LM', 'RM'], front: ['LS', 'RS'] },
+        3: { back: ['LB', 'CB', 'RB'], mid: ['LM', 'CM', 'RM'], front: ['LW', 'ST', 'RW'] },
+        4: { back: ['LB', 'LCB', 'RCB', 'RB'], mid: ['LM', 'LCM', 'RCM', 'RM'], front: ['LW', 'LS', 'RS', 'RW'] },
+        5: { back: ['LWB', 'LB', 'CB', 'RB', 'RWB'], mid: ['LM', 'LCM', 'CM', 'RCM', 'RM'], front: ['LW', 'LS', 'ST', 'RS', 'RW'] },
+    };
+    
+    const rows = [];
+    let slotIndex = 0;
+    
+    // Check if first number is 1 (goalkeeper)
+    if (parts[0] === 1 && matchSize >= 7) {
+        rows.push({ positions: ['GK'], slotStart: slotIndex });
+        slotIndex += 1;
+        parts.shift();
+    }
+    
+    parts.forEach((count, idx) => {
+        const rowType = idx === 0 ? 'back' : (idx === parts.length - 1 ? 'front' : 'mid');
+        const positions = positionsByRow[count]?.[rowType] || Array(count).fill('').map((_, i) => `P${slotIndex + i + 1}`);
+        rows.push({ positions: positions.slice(0, count), slotStart: slotIndex });
+        slotIndex += count;
+    });
+    
+    return rows;
+}
+
+function renderFormationLayout() {
+    const formations = FORMATION_TEMPLATES[state.matchSize] || [];
+    const currentFormation = formations.find(f => f.name === state.formation);
+    const rows = getFormationRows(state.formation, state.matchSize);
+    
+    let slotIndex = 0;
+    return rows.map((row, rowIdx) => {
+        const rowHtml = row.positions.map((position, posIdx) => {
+            const actualSlotIndex = slotIndex;
+            slotIndex++;
+            const playerId = state.pitchSlots[actualSlotIndex];
+            const player = playerId ? state.players.find(p => p.id === playerId) : null;
+            
+            return `<div class="pitch-slot ${playerId ? 'filled' : 'empty'}" data-slot="${actualSlotIndex}" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, ${actualSlotIndex})">
+                ${player ? `
+                    <div class="pitch-player" draggable="true" ondragstart="handleDragStart(event, ${player.id})" ondragend="handleDragEnd(event)" onclick="scoreGoal(${player.id})">
+                        <div class="player-position">${position}</div>
+                        <div class="player-avatar">${player.number}</div>
+                        <div class="player-name-tag">${player.name}</div>
+                        <div class="player-time" data-player-time="${player.id}">${formatTime(player.timeOnPitch)}</div>
+                        <button class="player-sub-btn" onclick="event.stopPropagation(); removePlayerFromPitch(${player.id})" title="Sub out">↓</button>
+                    </div>
+                ` : `
+                    <span class="slot-position">${position}</span>
+                    <span class="slot-number">${actualSlotIndex + 1}</span>
+                `}
+            </div>`;
+        }).join('');
+        
+        return `<div class="formation-row" data-row="${rowIdx}" style="--players-in-row: ${row.positions.length}">${rowHtml}</div>`;
+    }).reverse().join(''); // Reverse so forwards are at top
+}
+
 function render() {
     const app = document.getElementById('app');
     playerTimeElements = {};
@@ -672,14 +759,9 @@ function render() {
         </div>
         <main class="main-content">
             <div class="pitch-container">
-                <div class="pitch-markings"><div class="center-line"></div><div class="center-circle"></div></div>
-                <div class="pitch-slots" style="grid-template-columns: repeat(${Math.min(state.matchSize, 5)}, 1fr);">
-                    ${state.pitchSlots.map((playerId, index) => {
-                        const player = playerId ? state.players.find(p => p.id === playerId) : null;
-                        const formation = formations.find(f => f.name === state.formation);
-                        const position = formation?.positions[index] || '';
-                        return `<div class="pitch-slot ${playerId ? 'filled' : 'empty'}" data-slot="${index}" ondragover="handleDragOver(event)" ondragenter="handleDragEnter(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, ${index})">${player ? `<div class="pitch-player" draggable="true" ondragstart="handleDragStart(event, ${player.id})" ondragend="handleDragEnd(event)"><div class="player-position">${position}</div><div class="player-avatar">${player.number}</div><div class="player-name-tag">${player.name}</div><div class="player-time" data-player-time="${player.id}">${formatTime(player.timeOnPitch)}</div><div class="player-actions"><button class="player-action-btn goal" onclick="scoreGoal(${player.id})">⚽</button><button class="player-action-btn remove" onclick="removePlayerFromPitch(${player.id})">↓</button></div></div>` : `<span class="slot-position">${position}</span><span class="slot-number">${index + 1}</span>`}</div>`;
-                    }).join('')}
+                <div class="pitch-markings"><div class="center-line"></div><div class="center-circle"></div><div class="penalty-area"></div></div>
+                <div class="pitch-formation" id="pitchFormation">
+                    ${renderFormationLayout()}
                 </div>
             </div>
             <div class="bench-container">
